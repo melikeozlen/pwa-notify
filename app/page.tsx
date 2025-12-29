@@ -512,7 +512,25 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
+        <div className="mt-8 pt-6 border-t border-gray-200 space-y-4">
+          {subscription && (
+            <div className="bg-blue-50 rounded-lg p-4">
+              <p className="text-sm font-semibold text-blue-800 mb-2">
+                🌐 Uygulama Kapalıyken Bildirim Gönderme:
+              </p>
+              <p className="text-xs text-blue-700 mb-2">
+                Tarayıcıda veya başka bir yerden şu URL'ye istek atarak bildirim gönderebilirsiniz:
+              </p>
+              <div className="bg-white rounded p-2 mb-2">
+                <code className="text-xs break-all">
+                  {typeof window !== 'undefined' ? window.location.origin : ''}/api/trigger?message=Merhaba
+                </code>
+              </div>
+              <p className="text-xs text-blue-600">
+                Örnek: <code className="bg-white px-1 rounded">/api/trigger?message=Test&title=Başlık</code>
+              </p>
+            </div>
+          )}
           <p className="text-xs text-center text-gray-500">
             Bu uygulama PWA olarak yüklenebilir ve push bildirimleri gönderebilir.
           </p>

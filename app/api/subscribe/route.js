@@ -1,4 +1,5 @@
 import webPush from 'web-push';
+import { saveSubscription } from '../subscriptions';
 
 // VAPID keys - .env.local dosyasından yüklenir
 // Kendi key'lerinizi oluşturmak için: npx web-push generate-vapid-keys
@@ -22,6 +23,9 @@ export async function POST(req) {
       );
     }
 
+    // Subscription'ı kaydet
+    saveSubscription(subscription);
+
     // Push bildirimi gönder
     await webPush.sendNotification(subscription, JSON.stringify({
       title: '🎉 Test Bildirimi',
@@ -36,7 +40,7 @@ export async function POST(req) {
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: 'Bildirim başarıyla gönderildi!' 
+        message: 'Bildirim başarıyla gönderildi ve kaydedildi!' 
       }), 
       { 
         status: 200,
