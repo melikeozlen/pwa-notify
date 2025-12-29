@@ -28,15 +28,35 @@ const saveAutoNotificationState = async (state: {
   intervalSeconds: number;
   subscription: PushSubscription;
   notificationCount: number;
-}) => {
-  try {
-    const db = await openDB();
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    await store.put(state, 'autoNotificationState');
-  } catch (error) {
-    console.error('IndexedDB kayıt hatası:', error);
-  }
+}): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    openDB()
+      .then(db => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put(state, 'autoNotificationState');
+        
+        request.onsuccess = () => {
+          console.log('IndexedDB kayıt başarılı:', state);
+          resolve();
+        };
+        
+        request.onerror = () => {
+          console.error('IndexedDB kayıt hatası:', request.error);
+          reject(request.error);
+        };
+        
+        transaction.oncomplete = () => {
+          console.log('Transaction tamamlandı');
+        };
+        
+        transaction.onerror = () => {
+          console.error('Transaction hatası:', transaction.error);
+          reject(transaction.error);
+        };
+      })
+      .catch(reject);
+  });
 };
 
 const loadAutoNotificationState = async (): Promise<{
@@ -61,15 +81,31 @@ const loadAutoNotificationState = async (): Promise<{
   }
 };
 
-const clearAutoNotificationState = async () => {
-  try {
-    const db = await openDB();
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    await store.delete('autoNotificationState');
-  } catch (error) {
-    console.error('IndexedDB silme hatası:', error);
-  }
+const clearAutoNotificationState = async (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    openDB()
+      .then(db => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete('autoNotificationState');
+        
+        request.onsuccess = () => {
+          console.log('IndexedDB temizlendi');
+          resolve();
+        };
+        
+        request.onerror = () => {
+          console.error('IndexedDB silme hatası:', request.error);
+          reject(request.error);
+        };
+        
+        transaction.onerror = () => {
+          console.error('Transaction hatası:', transaction.error);
+          reject(transaction.error);
+        };
+      })
+      .catch(reject);
+  });
 };
 
 export default function Home() {
@@ -88,7 +124,6 @@ export default function Home() {
       setIsSupported(true);
       setPermission(Notification.permission);
       registerServiceWorker();
-      loadSavedState();
     }
   }, []);
 
@@ -96,26 +131,38 @@ export default function Home() {
   const loadSavedState = async () => {
     try {
       const savedState = await loadAutoNotificationState();
-      if (savedState && savedState.isActive && savedState.subscription) {
-        // Subscription'ı yeniden oluştur
+      console.log('Kaydedilmiş durum yüklendi:', savedState);
+      
+      if (savedState && savedState.isActive) {
+        // Subscription'ı kontrol et
         const registration = await navigator.serviceWorker.ready;
         const sub = await registration.pushManager.getSubscription();
         
         if (sub) {
+          // Subscription varsa durumu yükle
           setSubscription(sub);
-          setIntervalSeconds(savedState.intervalSeconds);
-          setNotificationCount(savedState.notificationCount);
+          setIntervalSeconds(savedState.intervalSeconds || 1);
+          setNotificationCount(savedState.notificationCount || 0);
           setIsAutoSending(true);
-          setMessage(`Otomatik bildirim devam ediyor. Her ${savedState.intervalSeconds} saniyede bir gönderiliyor.`);
+          setMessage(`Otomatik bildirim devam ediyor. Her ${savedState.intervalSeconds || 1} saniyede bir gönderiliyor.`);
+          
+          console.log('Otomatik bildirim durumu yüklendi:', {
+            intervalSeconds: savedState.intervalSeconds,
+            notificationCount: savedState.notificationCount
+          });
           
           // Service Worker'a durumu bildir
           if (registration.active) {
             registration.active.postMessage({
               type: 'START_AUTO_NOTIFICATION',
-              intervalSeconds: savedState.intervalSeconds,
+              intervalSeconds: savedState.intervalSeconds || 1,
               subscription: sub
             });
           }
+        } else {
+          // Subscription yoksa kaydedilmiş durumu temizle
+          console.log('Subscription bulunamadı, kaydedilmiş durum temizleniyor');
+          await clearAutoNotificationState();
         }
       }
     } catch (error) {
@@ -185,6 +232,8 @@ export default function Home() {
         intervalSeconds,
         subscription: subscription as any,
         notificationCount
+      }).catch(error => {
+        console.error('IndexedDB güncelleme hatası:', error);
       });
       
       // Service Worker'a güncelleme gönder
@@ -197,7 +246,7 @@ export default function Home() {
         }
       });
     }
-  }, [intervalSeconds]);
+  }, [intervalSeconds, isAutoSending, subscription, notificationCount]);
 
   const registerServiceWorker = async () => {
     try {
@@ -208,6 +257,13 @@ export default function Home() {
       const sub = await registration.pushManager.getSubscription();
       if (sub) {
         setSubscription(sub);
+        // Subscription yüklendikten sonra kaydedilmiş durumu yükle
+        setTimeout(() => {
+          loadSavedState();
+        }, 500);
+      } else {
+        // Subscription yoksa da kaydedilmiş durumu kontrol et
+        loadSavedState();
       }
     } catch (error) {
       console.error('Service Worker kaydı başarısız:', error);
@@ -243,6 +299,11 @@ export default function Home() {
       });
       setSubscription(sub);
       setMessage('Push bildirimleri için abone olundu!');
+      
+      // Subscription yüklendikten sonra kaydedilmiş durumu kontrol et
+      setTimeout(() => {
+        loadSavedState();
+      }, 300);
     } catch (error) {
       console.error('Push aboneliği başarısız:', error);
       setMessage('Push aboneliği başarısız oldu.');
@@ -307,15 +368,21 @@ export default function Home() {
     } else {
       setIsAutoSending(true);
       setNotificationCount(0);
-      setMessage(`Otomatik bildirim gönderimi başlatıldı. Her ${intervalSeconds} saniyede bir bildirim gönderilecek. Uygulamayı kapatabilirsiniz!`);
       
-      // IndexedDB'ye kaydet
-      await saveAutoNotificationState({
-        isActive: true,
-        intervalSeconds,
-        subscription: subscription as any,
-        notificationCount: 0
-      });
+      // IndexedDB'ye kaydet - ÖNCE kaydet, sonra mesaj göster
+      try {
+        await saveAutoNotificationState({
+          isActive: true,
+          intervalSeconds,
+          subscription: subscription as any,
+          notificationCount: 0
+        });
+        console.log('IndexedDB kayıt başarılı - Otomatik bildirim başlatıldı');
+        setMessage(`Otomatik bildirim gönderimi başlatıldı. Her ${intervalSeconds} saniyede bir bildirim gönderilecek. Uygulamayı kapatabilirsiniz!`);
+      } catch (error) {
+        console.error('IndexedDB kayıt hatası:', error);
+        setMessage('Otomatik bildirim başlatıldı ancak kayıt edilemedi. Lütfen tekrar deneyin.');
+      }
       
       // Service Worker'a başlat mesajı gönder
       const registration = await navigator.serviceWorker.ready;
@@ -432,9 +499,25 @@ export default function Home() {
                 min="1"
                 max="60"
                 value={intervalSeconds}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const value = parseInt(e.target.value) || 1;
-                  setIntervalSeconds(Math.max(1, Math.min(60, value)));
+                  const newValue = Math.max(1, Math.min(60, value));
+                  setIntervalSeconds(newValue);
+                  
+                  // Eğer otomatik bildirim aktifse IndexedDB'ye kaydet
+                  if (isAutoSending && subscription) {
+                    try {
+                      await saveAutoNotificationState({
+                        isActive: true,
+                        intervalSeconds: newValue,
+                        subscription: subscription as any,
+                        notificationCount
+                      });
+                      console.log('Süre değişikliği IndexedDB\'ye kaydedildi:', newValue);
+                    } catch (error) {
+                      console.error('Süre kaydetme hatası:', error);
+                    }
+                  }
                 }}
                 disabled={isAutoSending}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-200 disabled:cursor-not-allowed"
