@@ -475,6 +475,79 @@ export default function Home() {
     setMessage('Yerel bildirim gönderildi!');
   };
 
+  const resetAll = async () => {
+    if (!confirm('Tüm veriler sıfırlanacak. Emin misiniz?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('🔄 Reset başlatılıyor...');
+
+      // 1. Otomatik bildirimi durdur
+      if (isAutoSending) {
+        setIsAutoSending(false);
+        await clearAutoNotificationState();
+      }
+
+      // 2. Subscription'ı unsubscribe et
+      if (subscription) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const sub = await registration.pushManager.getSubscription();
+          if (sub) {
+            await sub.unsubscribe();
+            console.log('✅ Subscription unsubscribe edildi');
+          }
+        } catch (error) {
+          console.error('Subscription unsubscribe hatası:', error);
+        }
+      }
+
+      // 3. IndexedDB'yi temizle
+      await clearAutoNotificationState();
+      console.log('✅ IndexedDB temizlendi');
+
+      // 4. Backend'deki subscription'ları temizle
+      try {
+        const resetResponse = await fetch('/api/reset', {
+          method: 'POST',
+        });
+        const resetResult = await resetResponse.json();
+        if (resetResult.success) {
+          console.log('✅ Backend subscription\'lar temizlendi');
+        }
+      } catch (error) {
+        console.error('Backend reset hatası:', error);
+      }
+
+      // 5. Service Worker'a reset mesajı gönder
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration.active) {
+          registration.active.postMessage({
+            type: 'RESET'
+          });
+        }
+      } catch (error) {
+        console.error('Service Worker reset mesajı hatası:', error);
+      }
+
+      // 6. Tüm state'leri sıfırla
+      setSubscription(null);
+      setIntervalSeconds(1);
+      setNotificationCount(0);
+      setMessage('✅ Tüm veriler sıfırlandı! Yeniden başlayabilirsiniz.');
+
+      console.log('✅ Reset tamamlandı');
+    } catch (error: any) {
+      console.error('❌ Reset hatası:', error);
+      setMessage(`Reset sırasında hata oluştu: ${error?.message || 'Bilinmeyen hata'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // VAPID public key'i base64'ten Uint8Array'e çevir
   const urlBase64ToUint8Array = (base64String: string) => {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -651,6 +724,15 @@ export default function Home() {
                 </button>
               </>
             )}
+
+            {/* Reset Butonu */}
+            <button
+              onClick={resetAll}
+              disabled={isLoading}
+              className="w-full bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-md border-2 border-red-500"
+            >
+              🔄 Reset (Tüm Verileri Sıfırla)
+            </button>
           </div>
         </div>
 

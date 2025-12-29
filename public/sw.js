@@ -153,6 +153,11 @@ self.addEventListener('message', (event) => {
     if (currentSubscription) {
       startAutoNotification(event.data.intervalSeconds, currentSubscription);
     }
+  } else if (event.data.type === 'RESET') {
+    stopAutoNotification();
+    currentSubscription = null;
+    currentIntervalSeconds = 1;
+    console.log('Service Worker: Reset tamamlandı');
   }
 });
 
