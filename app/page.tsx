@@ -2,6 +2,76 @@
 
 import { useState, useEffect } from 'react';
 
+// IndexedDB utility fonksiyonları
+const DB_NAME = 'NotificationDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'autoNotification';
+
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+};
+
+const saveAutoNotificationState = async (state: {
+  isActive: boolean;
+  intervalSeconds: number;
+  subscription: PushSubscription;
+  notificationCount: number;
+}) => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    await store.put(state, 'autoNotificationState');
+  } catch (error) {
+    console.error('IndexedDB kayıt hatası:', error);
+  }
+};
+
+const loadAutoNotificationState = async (): Promise<{
+  isActive: boolean;
+  intervalSeconds: number;
+  subscription: PushSubscription | null;
+  notificationCount: number;
+} | null> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get('autoNotificationState');
+    
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('IndexedDB okuma hatası:', error);
+    return null;
+  }
+};
+
+const clearAutoNotificationState = async () => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    await store.delete('autoNotificationState');
+  } catch (error) {
+    console.error('IndexedDB silme hatası:', error);
+  }
+};
+
 export default function Home() {
   const [isSupported, setIsSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
@@ -18,10 +88,42 @@ export default function Home() {
       setIsSupported(true);
       setPermission(Notification.permission);
       registerServiceWorker();
+      loadSavedState();
     }
   }, []);
 
-  // Periyodik bildirim gönderme
+  // Kaydedilmiş durumu yükle
+  const loadSavedState = async () => {
+    try {
+      const savedState = await loadAutoNotificationState();
+      if (savedState && savedState.isActive && savedState.subscription) {
+        // Subscription'ı yeniden oluştur
+        const registration = await navigator.serviceWorker.ready;
+        const sub = await registration.pushManager.getSubscription();
+        
+        if (sub) {
+          setSubscription(sub);
+          setIntervalSeconds(savedState.intervalSeconds);
+          setNotificationCount(savedState.notificationCount);
+          setIsAutoSending(true);
+          setMessage(`Otomatik bildirim devam ediyor. Her ${savedState.intervalSeconds} saniyede bir gönderiliyor.`);
+          
+          // Service Worker'a durumu bildir
+          if (registration.active) {
+            registration.active.postMessage({
+              type: 'START_AUTO_NOTIFICATION',
+              intervalSeconds: savedState.intervalSeconds,
+              subscription: sub
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Kaydedilmiş durum yüklenirken hata:', error);
+    }
+  };
+
+  // Periyodik bildirim gönderme (sadece uygulama açıkken)
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
@@ -40,7 +142,19 @@ export default function Home() {
           });
 
           if (response.ok) {
-            setNotificationCount(prev => prev + 1);
+            setNotificationCount(prev => {
+              const newCount = prev + 1;
+              // IndexedDB'yi güncelle
+              if (subscription) {
+                saveAutoNotificationState({
+                  isActive: true,
+                  intervalSeconds,
+                  subscription: subscription as any,
+                  notificationCount: newCount
+                });
+              }
+              return newCount;
+            });
           }
         } catch (error) {
           console.error('Bildirim gönderme hatası:', error);
@@ -62,6 +176,28 @@ export default function Home() {
       }
     };
   }, [isAutoSending, intervalSeconds, subscription, permission]);
+
+  // intervalSeconds değiştiğinde IndexedDB'yi güncelle
+  useEffect(() => {
+    if (isAutoSending && subscription) {
+      saveAutoNotificationState({
+        isActive: true,
+        intervalSeconds,
+        subscription: subscription as any,
+        notificationCount
+      });
+      
+      // Service Worker'a güncelleme gönder
+      navigator.serviceWorker.ready.then(registration => {
+        if (registration.active) {
+          registration.active.postMessage({
+            type: 'UPDATE_INTERVAL',
+            intervalSeconds
+          });
+        }
+      });
+    }
+  }, [intervalSeconds]);
 
   const registerServiceWorker = async () => {
     try {
@@ -149,7 +285,7 @@ export default function Home() {
     }
   };
 
-  const toggleAutoSending = () => {
+  const toggleAutoSending = async () => {
     if (!subscription || permission !== 'granted') {
       setMessage('Önce bildirim izni vermelisiniz!');
       return;
@@ -159,10 +295,37 @@ export default function Home() {
       setIsAutoSending(false);
       setNotificationCount(0);
       setMessage('Otomatik bildirim gönderimi durduruldu.');
+      await clearAutoNotificationState();
+      
+      // Service Worker'a durdur mesajı gönder
+      const registration = await navigator.serviceWorker.ready;
+      if (registration.active) {
+        registration.active.postMessage({
+          type: 'STOP_AUTO_NOTIFICATION'
+        });
+      }
     } else {
       setIsAutoSending(true);
       setNotificationCount(0);
-      setMessage(`Otomatik bildirim gönderimi başlatıldı. Her ${intervalSeconds} saniyede bir bildirim gönderilecek.`);
+      setMessage(`Otomatik bildirim gönderimi başlatıldı. Her ${intervalSeconds} saniyede bir bildirim gönderilecek. Uygulamayı kapatabilirsiniz!`);
+      
+      // IndexedDB'ye kaydet
+      await saveAutoNotificationState({
+        isActive: true,
+        intervalSeconds,
+        subscription: subscription as any,
+        notificationCount: 0
+      });
+      
+      // Service Worker'a başlat mesajı gönder
+      const registration = await navigator.serviceWorker.ready;
+      if (registration.active) {
+        registration.active.postMessage({
+          type: 'START_AUTO_NOTIFICATION',
+          intervalSeconds,
+          subscription: subscription as any
+        });
+      }
     }
   };
 

@@ -1,5 +1,90 @@
 // Service Worker - Push Bildirimleri için
 
+let autoNotificationInterval = null;
+let currentIntervalSeconds = 1;
+let currentSubscription = null;
+
+// IndexedDB utility fonksiyonları
+const DB_NAME = 'NotificationDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'autoNotification';
+
+const openDB = () => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+};
+
+const loadAutoNotificationState = async () => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get('autoNotificationState');
+    
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('IndexedDB okuma hatası:', error);
+    return null;
+  }
+};
+
+const sendNotificationFromSW = async (subscription) => {
+  try {
+    const response = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(subscription),
+    });
+    
+    if (response.ok) {
+      console.log('Service Worker: Bildirim gönderildi');
+    }
+  } catch (error) {
+    console.error('Service Worker: Bildirim gönderme hatası:', error);
+  }
+};
+
+const startAutoNotification = (intervalSeconds, subscription) => {
+  stopAutoNotification(); // Önceki interval'i temizle
+  
+  currentIntervalSeconds = intervalSeconds;
+  currentSubscription = subscription;
+  
+  console.log(`Service Worker: Otomatik bildirim başlatıldı - Her ${intervalSeconds} saniyede bir`);
+  
+  // İlk bildirimi hemen gönder
+  sendNotificationFromSW(subscription);
+  
+  // Sonra periyodik olarak gönder
+  autoNotificationInterval = setInterval(() => {
+    sendNotificationFromSW(subscription);
+  }, intervalSeconds * 1000);
+};
+
+const stopAutoNotification = () => {
+  if (autoNotificationInterval) {
+    clearInterval(autoNotificationInterval);
+    autoNotificationInterval = null;
+    console.log('Service Worker: Otomatik bildirim durduruldu');
+  }
+};
+
 // Service Worker yüklendiğinde
 self.addEventListener('install', (event) => {
   console.log('Service Worker yüklendi');
@@ -7,9 +92,15 @@ self.addEventListener('install', (event) => {
 });
 
 // Service Worker aktif olduğunda
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', async (event) => {
   console.log('Service Worker aktif');
   event.waitUntil(self.clients.claim());
+  
+  // Kaydedilmiş durumu yükle
+  const savedState = await loadAutoNotificationState();
+  if (savedState && savedState.isActive && savedState.subscription) {
+    startAutoNotification(savedState.intervalSeconds, savedState.subscription);
+  }
 });
 
 // Push bildirimi geldiğinde
@@ -48,6 +139,21 @@ self.addEventListener('push', (event) => {
       data: notificationData
     })
   );
+});
+
+// Frontend'den mesaj alındığında
+self.addEventListener('message', (event) => {
+  console.log('Service Worker: Mesaj alındı', event.data);
+  
+  if (event.data.type === 'START_AUTO_NOTIFICATION') {
+    startAutoNotification(event.data.intervalSeconds, event.data.subscription);
+  } else if (event.data.type === 'STOP_AUTO_NOTIFICATION') {
+    stopAutoNotification();
+  } else if (event.data.type === 'UPDATE_INTERVAL') {
+    if (currentSubscription) {
+      startAutoNotification(event.data.intervalSeconds, currentSubscription);
+    }
+  }
 });
 
 // Bildirime tıklandığında
