@@ -8,6 +8,9 @@ export default function Home() {
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [intervalSeconds, setIntervalSeconds] = useState<number>(1);
+  const [isAutoSending, setIsAutoSending] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     // Tarayıcı desteğini kontrol et
@@ -17,6 +20,48 @@ export default function Home() {
       registerServiceWorker();
     }
   }, []);
+
+  // Periyodik bildirim gönderme
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (isAutoSending && subscription && permission === 'granted') {
+      // Bildirim gönderme fonksiyonu
+      const sendNotification = async () => {
+        if (!subscription) return;
+
+        try {
+          const response = await fetch('/api/subscribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(subscription),
+          });
+
+          if (response.ok) {
+            setNotificationCount(prev => prev + 1);
+          }
+        } catch (error) {
+          console.error('Bildirim gönderme hatası:', error);
+        }
+      };
+
+      // İlk bildirimi hemen gönder
+      sendNotification();
+      
+      // Sonra belirli aralıklarla gönder
+      intervalId = setInterval(() => {
+        sendNotification();
+      }, intervalSeconds * 1000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isAutoSending, intervalSeconds, subscription, permission]);
 
   const registerServiceWorker = async () => {
     try {
@@ -85,16 +130,39 @@ export default function Home() {
       });
 
       if (response.ok) {
-        setMessage('Bildirim gönderildi! Telefonunuza bakın.');
+        if (!isAutoSending) {
+          setMessage('Bildirim gönderildi! Telefonunuza bakın.');
+        }
       } else {
         const error = await response.json();
-        setMessage('Bildirim gönderilemedi: ' + (error.error || 'Bilinmeyen hata'));
+        if (!isAutoSending) {
+          setMessage('Bildirim gönderilemedi: ' + (error.error || 'Bilinmeyen hata'));
+        }
       }
     } catch (error) {
       console.error('Bildirim gönderme hatası:', error);
-      setMessage('Bildirim gönderme hatası oluştu.');
+      if (!isAutoSending) {
+        setMessage('Bildirim gönderme hatası oluştu.');
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const toggleAutoSending = () => {
+    if (!subscription || permission !== 'granted') {
+      setMessage('Önce bildirim izni vermelisiniz!');
+      return;
+    }
+
+    if (isAutoSending) {
+      setIsAutoSending(false);
+      setNotificationCount(0);
+      setMessage('Otomatik bildirim gönderimi durduruldu.');
+    } else {
+      setIsAutoSending(true);
+      setNotificationCount(0);
+      setMessage(`Otomatik bildirim gönderimi başlatıldı. Her ${intervalSeconds} saniyede bir bildirim gönderilecek.`);
     }
   };
 
@@ -177,6 +245,44 @@ export default function Home() {
             </div>
           )}
 
+          {/* Otomatik Bildirim Gönderimi Durumu */}
+          {isAutoSending && (
+            <div className="bg-blue-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Otomatik Bildirim:</p>
+              <p className="font-semibold text-blue-600">
+                🔄 Aktif - Her {intervalSeconds} saniyede bir gönderiliyor
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Gönderilen bildirim sayısı: {notificationCount}
+              </p>
+            </div>
+          )}
+
+          {/* Saniye Girişi */}
+          {permission === 'granted' && subscription && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <label className="block text-sm text-gray-600 mb-2">
+                Bildirim Aralığı (saniye):
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={intervalSeconds}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || 1;
+                  setIntervalSeconds(Math.max(1, Math.min(60, value)));
+                }}
+                disabled={isAutoSending}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-200 disabled:cursor-not-allowed"
+                placeholder="1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Minimum 1, maksimum 60 saniye
+              </p>
+            </div>
+          )}
+
           {/* Mesaj */}
           {message && (
             <div className={`p-4 rounded-lg ${
@@ -218,13 +324,27 @@ export default function Home() {
             )}
 
             {subscription && (
-              <button
-                onClick={sendTestNotification}
-                disabled={isLoading}
-                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-md"
-              >
-                {isLoading ? 'Gönderiliyor...' : 'Push Bildirimi Gönder'}
-              </button>
+              <>
+                <button
+                  onClick={sendTestNotification}
+                  disabled={isLoading || isAutoSending}
+                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-md"
+                >
+                  {isLoading ? 'Gönderiliyor...' : 'Tek Bildirim Gönder'}
+                </button>
+
+                <button
+                  onClick={toggleAutoSending}
+                  disabled={isLoading}
+                  className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors shadow-md ${
+                    isAutoSending
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-orange-600 hover:bg-orange-700 text-white'
+                  }`}
+                >
+                  {isAutoSending ? '⏸️ Otomatik Bildirimi Durdur' : '▶️ Otomatik Bildirim Başlat'}
+                </button>
+              </>
             )}
           </div>
         </div>
