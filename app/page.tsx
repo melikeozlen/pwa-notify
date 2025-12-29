@@ -260,6 +260,25 @@ export default function Home() {
       const sub = await registration.pushManager.getSubscription();
       if (sub) {
         setSubscription(sub);
+        
+        // Mevcut subscription'ı backend'e kaydet (eğer kaydedilmemişse)
+        try {
+          const subscriptionJson = JSON.parse(JSON.stringify(sub));
+          const saveResponse = await fetch('/api/subscribe/save', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(subscriptionJson),
+          });
+          
+          if (saveResponse.ok) {
+            console.log('Mevcut subscription backend\'e kaydedildi');
+          }
+        } catch (saveError) {
+          console.error('Mevcut subscription kaydetme hatası:', saveError);
+        }
+        
         // Subscription yüklendikten sonra kaydedilmiş durumu yükle
         setTimeout(() => {
           loadSavedState();
@@ -301,7 +320,29 @@ export default function Home() {
         )
       });
       setSubscription(sub);
-      setMessage('Push bildirimleri için abone olundu!');
+      
+      // Subscription'ı backend'e kaydet
+      try {
+        const subscriptionJson = JSON.parse(JSON.stringify(sub));
+        const saveResponse = await fetch('/api/subscribe/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(subscriptionJson),
+        });
+        
+        if (saveResponse.ok) {
+          console.log('Subscription backend\'e kaydedildi');
+          setMessage('Push bildirimleri için abone olundu ve kaydedildi! Artık server\'dan bildirim gönderebilirsiniz.');
+        } else {
+          console.error('Subscription kaydedilemedi');
+          setMessage('Push bildirimleri için abone olundu ancak kaydedilemedi.');
+        }
+      } catch (saveError) {
+        console.error('Subscription kaydetme hatası:', saveError);
+        setMessage('Push bildirimleri için abone olundu ancak kaydetme sırasında hata oluştu.');
+      }
       
       // Subscription yüklendikten sonra kaydedilmiş durumu kontrol et
       setTimeout(() => {
@@ -559,12 +600,11 @@ export default function Home() {
             )}
 
             {permission === 'granted' && !subscription && (
-              <button
-                onClick={subscribeToPush}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-md"
-              >
-                Push Bildirimlerine Abone Ol
-              </button>
+              <div className="bg-yellow-50 rounded-lg p-4 text-center">
+                <p className="text-sm text-yellow-700">
+                  ⏳ Push aboneliği oluşturuluyor...
+                </p>
+              </div>
             )}
 
             {permission === 'granted' && (
