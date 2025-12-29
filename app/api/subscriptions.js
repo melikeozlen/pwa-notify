@@ -44,13 +44,51 @@ export function saveSubscription(subscription) {
     
     const filePath = SUBSCRIPTIONS_FILE;
     console.log('Subscription dosyasına yazılıyor:', filePath);
-    fs.writeFileSync(filePath, JSON.stringify(subscriptions, null, 2), 'utf8');
-    console.log('Subscription başarıyla kaydedildi. Toplam:', subscriptions.length);
-    return true;
+    
+    // Dizinin var olduğundan emin ol
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      console.log('Dizin mevcut değil, oluşturuluyor:', dir);
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    // Dosya yazma işlemi
+    try {
+      const data = JSON.stringify(subscriptions, null, 2);
+      fs.writeFileSync(filePath, data, { encoding: 'utf8', flag: 'w' });
+      console.log('✅ Subscription başarıyla kaydedildi. Toplam:', subscriptions.length);
+      
+      // Dosyanın yazıldığını doğrula
+      if (fs.existsSync(filePath)) {
+        const fileSize = fs.statSync(filePath).size;
+        console.log('✅ Dosya doğrulandı, boyut:', fileSize, 'bytes');
+        return true;
+      } else {
+        console.error('❌ Dosya yazıldı ama bulunamadı!');
+        return false;
+      }
+    } catch (writeError) {
+      console.error('❌ Dosya yazma hatası:', writeError);
+      console.error('Hata kodu:', writeError.code);
+      console.error('Hata mesajı:', writeError.message);
+      
+      // İzin hatası kontrolü
+      if (writeError.code === 'EACCES' || writeError.code === 'EPERM') {
+        console.error('❌ Dosya yazma izni yok!');
+      } else if (writeError.code === 'ENOENT') {
+        console.error('❌ Dizin bulunamadı!');
+      } else if (writeError.code === 'ENOSPC') {
+        console.error('❌ Disk dolu!');
+      }
+      
+      return false;
+    }
   } catch (error) {
-    console.error('Subscription kaydetme hatası:', error);
+    console.error('❌ Subscription kaydetme hatası:', error);
     console.error('Hata detayı:', error.message);
+    console.error('Hata kodu:', error.code);
     console.error('Dosya yolu:', SUBSCRIPTIONS_FILE);
+    console.error('Çalışma dizini:', process.cwd());
     return false;
   }
 }

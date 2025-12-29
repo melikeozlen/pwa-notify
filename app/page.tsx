@@ -364,7 +364,9 @@ export default function Home() {
           setMessage('Push bildirimleri için abone olundu ve kaydedildi! Artık server\'dan bildirim gönderebilirsiniz.');
         } else {
           console.error('❌ Subscription kaydedilemedi:', saveResult);
-          setMessage(`Push bildirimleri için abone olundu ancak kaydedilemedi: ${saveResult.error || 'Bilinmeyen hata'}`);
+          const errorMsg = saveResult.error || 'Bilinmeyen hata';
+          const details = saveResult.details ? `\n\nDetay: ${saveResult.details.suggestion || ''}` : '';
+          setMessage(`Push bildirimleri için abone olundu ancak kaydedilemedi: ${errorMsg}${details}`);
         }
       } catch (saveError: any) {
         console.error('❌ Subscription kaydetme hatası:', saveError);

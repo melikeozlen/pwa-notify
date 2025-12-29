@@ -33,10 +33,16 @@ export async function POST(req) {
     
     if (!saved) {
       console.error('❌ Subscription kaydetme başarısız oldu');
+      const filePath = require('path').join(process.cwd(), 'subscriptions.json');
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'Subscription kaydedilemedi - dosya yazma hatası olabilir' 
+          error: 'Subscription kaydedilemedi - dosya yazma hatası',
+          details: {
+            filePath: filePath,
+            cwd: process.cwd(),
+            suggestion: 'Lütfen dosya yazma izinlerini kontrol edin veya manuel olarak subscriptions.json dosyasını oluşturun.'
+          }
         }), 
         { 
           status: 500,
