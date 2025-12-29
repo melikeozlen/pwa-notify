@@ -319,13 +319,28 @@ export default function Home() {
 
   const subscribeToPush = async () => {
     try {
+      console.log('🔄 Push aboneliği oluşturuluyor...');
+      setMessage('Push aboneliği oluşturuluyor...');
+      
       const registration = await navigator.serviceWorker.ready;
+      console.log('✅ Service Worker hazır');
+      
+      // Mevcut subscription varsa önce unsubscribe et
+      const existingSub = await registration.pushManager.getSubscription();
+      if (existingSub) {
+        console.log('Mevcut subscription bulundu, unsubscribe ediliyor...');
+        await existingSub.unsubscribe();
+      }
+      
+      console.log('Yeni subscription oluşturuluyor...');
       const sub = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(
           'BIQliiuXt2zwsX_Z_4korBFme7AL3_mQaqm7RkFXckII2wVSBRXPv0GUWGHKHtbYGBk04wiTPmnTvhDZgkrfRQw'
         )
       });
+      
+      console.log('✅ Subscription oluşturuldu:', sub.endpoint);
       setSubscription(sub);
       
       // Subscription'ı backend'e kaydet
@@ -360,9 +375,10 @@ export default function Home() {
       setTimeout(() => {
         loadSavedState();
       }, 300);
-    } catch (error) {
-      console.error('Push aboneliği başarısız:', error);
-      setMessage('Push aboneliği başarısız oldu.');
+    } catch (error: any) {
+      console.error('❌ Push aboneliği başarısız:', error);
+      setSubscription(null);
+      setMessage(`Push aboneliği başarısız oldu: ${error?.message || 'Bilinmeyen hata'}. Lütfen sayfayı yenileyip tekrar deneyin.`);
     }
   };
 
@@ -537,6 +553,7 @@ export default function Home() {
       setSubscription(null);
       setIntervalSeconds(1);
       setNotificationCount(0);
+      setPermission('default'); // İzin durumunu da sıfırla
       setMessage('✅ Tüm veriler sıfırlandı! Yeniden başlayabilirsiniz.');
 
       console.log('✅ Reset tamamlandı');
@@ -686,9 +703,21 @@ export default function Home() {
 
             {permission === 'granted' && !subscription && (
               <div className="bg-yellow-50 rounded-lg p-4 text-center">
-                <p className="text-sm text-yellow-700">
-                  ⏳ Push aboneliği oluşturuluyor...
+                <p className="text-sm text-yellow-700 mb-2">
+                  {message && message.includes('aboneliği') ? message : '⏳ Push aboneliği oluşturuluyor...'}
                 </p>
+                {message && message.includes('başarısız') && (
+                  <button
+                    onClick={async () => {
+                      setMessage('');
+                      setSubscription(null);
+                      await subscribeToPush();
+                    }}
+                    className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Tekrar Dene
+                  </button>
+                )}
               </div>
             )}
 
