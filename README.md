@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PWA Bildirim Uygulaması
 
-## Getting Started
+Basit bir Progressive Web App (PWA) bildirim test uygulaması. Telefonunuza push bildirimleri göndermek için kullanabilirsiniz.
 
-First, run the development server:
+## Özellikler
 
+- ✅ Service Worker ile push bildirimleri
+- ✅ PWA manifest dosyası
+- ✅ Bildirim izni yönetimi
+- ✅ Yerel ve push bildirim testleri
+- ✅ Modern ve responsive arayüz
+
+## Kurulum
+
+1. Bağımlılıkları yükleyin:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. VAPID Keys oluşturun (isteğe bağlı, test için varsayılan key'ler kullanılabilir):
+```bash
+npx web-push generate-vapid-keys
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Bu komut size public ve private key'ler verecek. Bunları `.env.local` dosyasına ekleyin:
+```
+VAPID_PUBLIC_KEY=your-public-key
+VAPID_PRIVATE_KEY=your-private-key
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Geliştirme sunucusunu başlatın:
+```bash
+npm run dev
+```
 
-## Learn More
+4. Tarayıcıda `http://localhost:3000` adresini açın.
 
-To learn more about Next.js, take a look at the following resources:
+## Kullanım
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Bildirim İzni İste**: Sayfada "Bildirim İzni İste" butonuna tıklayın ve izin verin.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. **Push Bildirimlerine Abone Ol**: İzin verildikten sonra "Push Bildirimlerine Abone Ol" butonuna tıklayın.
 
-## Deploy on Vercel
+3. **Bildirim Gönder**: 
+   - "Yerel Bildirim Gönder" - Tarayıcıda anında bildirim gösterir
+   - "Push Bildirimi Gönder" - Service Worker üzerinden push bildirimi gönderir (telefonda çalışır)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## PWA Olarak Yükleme
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Android (Chrome)
+1. Chrome tarayıcısında uygulamayı açın
+2. Menüden "Ana ekrana ekle" seçeneğini seçin
+3. Uygulama ana ekranınıza eklenecek
+
+### iOS (Safari)
+1. Safari'de uygulamayı açın
+2. Paylaş butonuna tıklayın
+3. "Ana Ekrana Ekle" seçeneğini seçin
+
+## Önemli Notlar
+
+- Push bildirimleri için HTTPS gereklidir (localhost hariç)
+- Production'da mutlaka kendi VAPID key'lerinizi kullanın
+- Service Worker sadece HTTPS veya localhost'ta çalışır
+- Bazı tarayıcılar push bildirimlerini desteklemez
+
+## Teknolojiler
+
+- Next.js 16
+- React 19
+- Service Worker API
+- Web Push API
+- Tailwind CSS
