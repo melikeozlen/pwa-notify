@@ -264,6 +264,8 @@ export default function Home() {
         // Mevcut subscription'ı backend'e kaydet (eğer kaydedilmemişse)
         try {
           const subscriptionJson = JSON.parse(JSON.stringify(sub));
+          console.log('Mevcut subscription kaydediliyor:', subscriptionJson);
+          
           const saveResponse = await fetch('/api/subscribe/save', {
             method: 'POST',
             headers: {
@@ -272,11 +274,16 @@ export default function Home() {
             body: JSON.stringify(subscriptionJson),
           });
           
-          if (saveResponse.ok) {
-            console.log('Mevcut subscription backend\'e kaydedildi');
+          const saveResult = await saveResponse.json();
+          console.log('Mevcut subscription kaydetme response:', saveResult);
+          
+          if (saveResponse.ok && saveResult.success) {
+            console.log('✅ Mevcut subscription backend\'e kaydedildi');
+          } else {
+            console.error('❌ Mevcut subscription kaydedilemedi:', saveResult);
           }
         } catch (saveError) {
-          console.error('Mevcut subscription kaydetme hatası:', saveError);
+          console.error('❌ Mevcut subscription kaydetme hatası:', saveError);
         }
         
         // Subscription yüklendikten sonra kaydedilmiş durumu yükle
@@ -324,6 +331,8 @@ export default function Home() {
       // Subscription'ı backend'e kaydet
       try {
         const subscriptionJson = JSON.parse(JSON.stringify(sub));
+        console.log('Subscription kaydediliyor:', subscriptionJson);
+        
         const saveResponse = await fetch('/api/subscribe/save', {
           method: 'POST',
           headers: {
@@ -332,16 +341,19 @@ export default function Home() {
           body: JSON.stringify(subscriptionJson),
         });
         
-        if (saveResponse.ok) {
-          console.log('Subscription backend\'e kaydedildi');
+        const saveResult = await saveResponse.json();
+        console.log('Kaydetme response:', saveResult);
+        
+        if (saveResponse.ok && saveResult.success) {
+          console.log('✅ Subscription backend\'e kaydedildi');
           setMessage('Push bildirimleri için abone olundu ve kaydedildi! Artık server\'dan bildirim gönderebilirsiniz.');
         } else {
-          console.error('Subscription kaydedilemedi');
-          setMessage('Push bildirimleri için abone olundu ancak kaydedilemedi.');
+          console.error('❌ Subscription kaydedilemedi:', saveResult);
+          setMessage(`Push bildirimleri için abone olundu ancak kaydedilemedi: ${saveResult.error || 'Bilinmeyen hata'}`);
         }
-      } catch (saveError) {
-        console.error('Subscription kaydetme hatası:', saveError);
-        setMessage('Push bildirimleri için abone olundu ancak kaydetme sırasında hata oluştu.');
+      } catch (saveError: any) {
+        console.error('❌ Subscription kaydetme hatası:', saveError);
+        setMessage(`Push bildirimleri için abone olundu ancak kaydetme sırasında hata oluştu: ${saveError?.message || 'Bilinmeyen hata'}`);
       }
       
       // Subscription yüklendikten sonra kaydedilmiş durumu kontrol et
