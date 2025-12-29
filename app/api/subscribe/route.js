@@ -24,7 +24,12 @@ export async function POST(req) {
     }
 
     // Subscription'ı kaydet
-    saveSubscription(subscription);
+    const saved = saveSubscription(subscription);
+    if (!saved) {
+      console.error('Subscription kaydedilemedi!');
+    } else {
+      console.log('Subscription başarıyla kaydedildi');
+    }
 
     // Push bildirimi gönder
     await webPush.sendNotification(subscription, JSON.stringify({

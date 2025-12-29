@@ -1,5 +1,6 @@
 import webPush from 'web-push';
 import { getAllSubscriptions } from '../subscriptions';
+import path from 'path';
 
 // VAPID keys - .env.local dosyasından yüklenir
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BIQliiuXt2zwsX_Z_4korBFme7AL3_mQaqm7RkFXckII2wVSBRXPv0GUWGHKHtbYGBk04wiTPmnTvhDZgkrfRQw';
@@ -20,6 +21,8 @@ export async function GET(req) {
 
     // Kaydedilmiş tüm subscription'ları al
     const subscriptions = getAllSubscriptions();
+    console.log('Toplam subscription sayısı:', subscriptions.length);
+    console.log('Subscription dosyası yolu:', path.join(process.cwd(), 'subscriptions.json'));
 
     if (subscriptions.length === 0) {
       return new Response(

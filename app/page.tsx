@@ -180,12 +180,15 @@ export default function Home() {
         if (!subscription) return;
 
         try {
+          // Subscription'ı JSON'a çevir
+          const subscriptionJson = JSON.parse(JSON.stringify(subscription));
+          
           const response = await fetch('/api/subscribe', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify(subscription),
+            body: JSON.stringify(subscriptionJson),
           });
 
           if (response.ok) {
@@ -318,12 +321,16 @@ export default function Home() {
 
     setIsLoading(true);
     try {
+      // Subscription'ı JSON'a çevir
+      const subscriptionJson = JSON.parse(JSON.stringify(subscription));
+      console.log('Gönderilen subscription:', subscriptionJson);
+      
       const response = await fetch('/api/subscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(subscription),
+        body: JSON.stringify(subscriptionJson),
       });
 
       if (response.ok) {
